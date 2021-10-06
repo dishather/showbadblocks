@@ -59,7 +59,7 @@ void WritePng( QString const &path, BadBlocks_t const &badBlocks,
     // translate bytes to sectors.
     qint64 const devsec  = devsize / SECTORSIZE;
     qint64 const donesec = donesize / SECTORSIZE;
-    qint64 const ratio = devsec / ( PNGSIZE * PNGSIZE );
+    qint64 const ratio = devsec / ( PNGSIZE * PNGSIZE - 4 );
 
     QString pngfile( path );
     pngfile.replace( QChar( '/' ), "_" );
