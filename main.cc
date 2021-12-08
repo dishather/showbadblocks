@@ -1,14 +1,14 @@
 #include <QColor>
+#include <QCoreApplication>
 #include <QDateTime>
+#include <QElapsedTimer>
 #include <QFile>
+#include <QImage>
 #include <QSet>
 #include <QString>
 #include <QStringList>
 #include <QTextStream>
-#include <QTime>
-#include <QImage>
-#include <QCoreApplication>
-#include <QTime>
+//#include <QTime>
 
 #include <iostream>
 
@@ -59,7 +59,7 @@ void WritePng( QString const &path, BadBlocks_t const &badBlocks,
     // translate bytes to sectors.
     qint64 const devsec  = devsize / SECTORSIZE;
     qint64 const donesec = donesize / SECTORSIZE;
-    qint64 const ratio = devsec / ( PNGSIZE * PNGSIZE );
+    double const ratio = static_cast<double>( devsec ) / ( PNGSIZE * PNGSIZE );
 
     QString pngfile( path );
     pngfile.replace( QChar( '/' ), "_" );
@@ -124,7 +124,7 @@ void WritePng( QString const &path, BadBlocks_t const &badBlocks,
         for( QSet<qint64>::const_iterator i = badBlocks.bads.constBegin();
             i != badBlocks.bads.constEnd(); ++i )
         {
-            out << *i << endl;
+            out << *i << Qt::endl;
         }
     }
     f.close();
@@ -135,7 +135,7 @@ void WritePng( QString const &path, BadBlocks_t const &badBlocks,
         for( QMap<qint64,qint64>::const_iterator i = badBlocks.spans.constBegin();
             i != badBlocks.spans.constEnd(); ++i )
         {
-            out << i.key() << ' ' << i.value() << endl;
+            out << i.key() << ' ' << i.value() << Qt::endl;
         }
     }
     f1.close();
@@ -194,7 +194,7 @@ void GetBadBlocks( QString const &path, BadBlocks_t &badBlocks,
     }
 
     qint64 curBlock = 0;
-    QTime t;
+    QElapsedTimer t;
     t.start();
     QDateTime const dt = QDateTime::currentDateTime();
     int counter = 0;
