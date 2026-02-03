@@ -19,14 +19,7 @@ Files:
 
 badblocks_dev_sdX.png - map of bad blocks (picture)
 badblocks_dev_sdX.txt - list of bad blocks (not sorted!)
-badblocks_dev_sdX.span - list of bad block spans (not tested!)
-
-
-Using badblocks2parted.py:
-
-1. Modify the script (replace hardcoded values with yours)
-2. Run:
-$ python badblocks2parted.py
-
-It prints the commands needed to create (and delete) RAID JBOD on the disk.
+badblocks_dev_sdX.span - list of bad block spans
+badblocks_dev_sdX.shell - commands to create/use/delete partitions while
+    avoiding bad sectors (use at your own risk).
 

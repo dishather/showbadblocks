@@ -139,7 +139,64 @@ void WritePng( QString const &path, BadBlocks_t const &badBlocks,
         }
     }
     f1.close();
+
+    // also write commands to create partitions, etc.
     std::cout << "Written." << std::endl;
+    QFile f2( pngfile + ".shell" );
+    if( f2.open( QIODevice::WriteOnly | QIODevice::Text ) )
+    {
+        QTextStream out( &f2 );
+        int count = 1;
+        qint64 last = 2048; // more ot less standard I think
+        if( donesize < devsize )
+        {
+            out << "WARNING! The disk has not been fully scanned yet.\n";
+            out << "The last partition may contain bad sectors,\n\n";
+        }
+        out << "Commands:\n\nCreate partitions:\nparted -s -a none " << path <<
+            " unit s";
+        for( QMap<qint64,qint64>::const_iterator i = badBlocks.spans.constBegin();
+            i != badBlocks.spans.constEnd(); ++i )
+        {
+            if( last < i.key() )
+            {
+                out << " mkpart " << count << ' ' << last << ' ' << i.key();
+                ++count;
+            }
+            last = i.value();
+        }
+        // final partition spans till the end of the disk
+        out << " mkpart " << count << ' ' << last << ' ' << ( devsize / SECTORSIZE);
+        out << "\n\nDelete partitions:\nparted -s -a none " << path;
+        for( int i = 1; i <= count; ++i )
+        {
+            out << " rm " << i;
+        }
+        out << "\n\n\nCreate BTRFS JBOD array on partitions:\n";
+        out << "mkfs.btrfs -d single";
+        for( int i = 1; i <= count; ++i )
+        {
+            out << " " << path << i;
+        }
+        out << "\nMount it with:\n";
+        out << "mount " << path << "1 /mnt/mountpoint\n";
+        out << "\n\nCreate RAID JBOD array on partitions using 'mdadm' (obsolete):\n";
+        out << "mdadm --create /dev/md0 --chunk=16 --level=linear --raid-devices=" << count;
+        for( int i = 1; i <= count; ++i )
+        {
+            out << " " << path << i;
+        }
+        out << "\n\nRemove RAID JBOD array and its traces:\n";
+        out << "mdadm --stop /dev/md0\n";
+        out << "mdadm --remove /dev/md0\n";
+        out << "mdadm --zero-superblock";
+        for( int i = 1; i <= count; ++i )
+        {
+            out << ' ' << path << i;
+        }
+        out << "\n";
+    }
+    f2.close();
 }
 
 //
@@ -272,23 +329,24 @@ int main( int argc, char *argv[] )
     QCoreApplication app( argc,argv );
 
     QString device;
-    qint64 minSpan = 0;
+    qint64 minSpan = 10240 * 1024;
     if( !ParseCommandLine( app.arguments(), device, minSpan ) )
     {
         std::cout << "Usage:\n" << qPrintable( app.arguments()[0] ) <<
             " [-s span] device" << std::endl;
         std::cout << "   -s span: set minimum contiguous span that must be "
-            "free from defect.\n"
+            "free from defect, in megabytes.\n"
+            "            Default: 10 MB.\n"
             "            If any sector within it is bad, the whole span "
-            "is marked bad.\n"
-            "            If span is zero or not supplied, then each sector "
-            "is checked.\n" << std::endl;
+            "is marked bad.\n" <<
+            std::endl;
         return 1;
     }
 
     // 1. define device size
     qint64 devsize = GetDeviceSize( device );
-    std::cout << "Device size=" << devsize << " bytes" << std::endl;
+    std::cout << "Device size=" << devsize << " bytes (" <<
+        (devsize / SECTORSIZE) << " sectors)." << std::endl;
 
     // 2. read device and create a list of bad blocks
     BadBlocks_t badBlocks;
