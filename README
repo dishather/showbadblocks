@@ -1,3 +1,39 @@
+What it is:
+
+This utility reads the given disk device sequentially, compiling a list of
+bad sectors. Upon stumbling on a bad sector, the utility assumes it is part of a
+larger span of bad blocks (which is usually true for mechanical hard disk drives).
+So it remembers the bad "span" and continues checking past its end, saving time.
+It also dumps a picture with visual representation of the bad areas, and some
+text files.
+In particular, it dumps commands to create partitions that avoid any bad sectors
+on the disk. That is, partitions are created in such a manner that bad sectors are
+left between them.
+Of course, creating partitions means you lose all existing data on the disk.
+
+Note 1:
+THIS IS NOT A RECOVERY TOOL!
+If you have a faulty disk with valuable data, contact a firm that specializes in
+data recovery. Attempt to recover data yourself may have disastrous results,
+even using "reputable" recovery software.
+
+Note 2:
+The program does NOT use low-level disk operations. Instead, it reads from the
+disk device using ordinary file operations. This worked for me, but may not work
+for you.
+
+Note 3:
+The program does not modify the disk it checks. But you may wish to use commands
+it dumps to a *.shell file that do.
+
+Note 4:
+Even if you are lucky and your disk seems to work after partitioning, do not
+assume it will last long. If the disk is faulty, it is faulty. More bad sectors
+may appear over time, or the disk may simply die. Restoring data from a tricky
+set of pertitions is impractical, so do not keep anything valuable on such a
+disk.
+
+
 Compiling:
 
 Prerequisites:
@@ -11,15 +47,21 @@ $ qmake
 $ make
 
 How to use:
-$ ./showbadblocks -s 10 /dev/sdX
+# run under root
+$ ./showbadblocks -s 10 [-t 1500] /dev/sdX
 ... wait till it finishes ...
 ... it saves files every 10 minutes ...
 
-Files:
+Here, "-s 10" means spans are 10 megabytes.
+"-t 1500" means we also consider slow-to-read sectors bad. Here, sectors that
+take longer than 1500 milliseconds to read.
 
-badblocks_dev_sdX.png - map of bad blocks (picture)
+Files created:
+
+badblocks_dev_sdX.png - map of bad blocks (picture). Red dots are actual bad
+    sectors, grey dots are the entire spans we marked bad.
 badblocks_dev_sdX.txt - list of bad blocks (not sorted!)
-badblocks_dev_sdX.span - list of bad block spans
+badblocks_dev_sdX.span - list of bad block spans.
 badblocks_dev_sdX.shell - commands to create/use/delete partitions while
     avoiding bad sectors (use at your own risk).
 

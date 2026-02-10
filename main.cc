@@ -165,8 +165,18 @@ void WritePng( QString const &path, BadBlocks_t const &badBlocks,
             }
             last = i.value();
         }
-        // final partition spans till the end of the disk
-        out << " mkpart " << count << ' ' << last << ' ' << ( devsize / SECTORSIZE);
+        // final partition spans till the end of the disk (aligned on a megabyte)
+        qint64 endsector = ( devsize / SECTORSIZE ) - last - 1;
+        if( endsector > 2048 )
+        {
+            endsector /= 2048; // truncate
+            endsector = last + ( endsector * 2048 );
+            out << " mkpart " << count << ' ' << last << ' ' << endsector;
+        }
+        else
+        {
+            --count; // no last partition: we have errors in the end.
+        }
         out << "\n\nDelete partitions:\nparted -s -a none " << path;
         for( int i = 1; i <= count; ++i )
         {
@@ -242,7 +252,7 @@ qint64 RegisterBadBlock( BadBlocks_t &badBlocks, qint64 minSpan, qint64 badBlock
 //
 static
 void GetBadBlocks( QString const &path, BadBlocks_t &badBlocks,
-    qint64 devsize, qint64 minSpan )
+    qint64 devsize, qint64 minSpan, qint64 maxReadTime )
 {
     QFile dev( path );
     if( !dev.open( QIODevice::ReadOnly) )
@@ -251,8 +261,9 @@ void GetBadBlocks( QString const &path, BadBlocks_t &badBlocks,
     }
 
     qint64 curBlock = 0;
-    QElapsedTimer t;
+    QElapsedTimer t, readTimer;
     t.start();
+    readTimer.start();
     QDateTime const dt = QDateTime::currentDateTime();
     int counter = 0;
     qint64 const devBlocks = devsize / SECTORSIZE;
@@ -260,8 +271,9 @@ void GetBadBlocks( QString const &path, BadBlocks_t &badBlocks,
     while( curBlock < devBlocks )
     {
         char buf[SECTORSIZE];
+        readTimer.restart();
         qint64 const r = dev.read( buf, qint64( SECTORSIZE ) );
-        if( r == SECTORSIZE )
+        if( r == SECTORSIZE && ( maxReadTime > readTimer.elapsed() ) )
         {
             ++curBlock;
         }
@@ -299,7 +311,8 @@ void GetBadBlocks( QString const &path, BadBlocks_t &badBlocks,
 
 //
 static
-bool ParseCommandLine( QStringList const &args, QString &device, qint64 &minSpan )
+bool ParseCommandLine( QStringList const &args, QString &device, qint64 &minSpan,
+        qint64 &maxReadTime )
 {
     for( int i = 1; i < args.size(); ++i )
     {
@@ -313,6 +326,16 @@ bool ParseCommandLine( QStringList const &args, QString &device, qint64 &minSpan
                 return false;
             }
             minSpan *= 1024*1024;
+        }
+        else if( args[i] == "-t" )
+        {
+            ++i;
+            bool ok = false;
+            maxReadTime = ( qint64 ) args[i].toLongLong( &ok );
+            if( !ok )
+            {
+                return false;
+            }
         }
         else
         {
@@ -330,16 +353,21 @@ int main( int argc, char *argv[] )
 
     QString device;
     qint64 minSpan = 10240 * 1024;
-    if( !ParseCommandLine( app.arguments(), device, minSpan ) )
+    qint64 maxReadTime = 60000; // a minute
+    if( !ParseCommandLine( app.arguments(), device, minSpan, maxReadTime ) )
     {
         std::cout << "Usage:\n" << qPrintable( app.arguments()[0] ) <<
-            " [-s span] device" << std::endl;
+            " [-s span] [-t maxReadTime] device" << std::endl;
         std::cout << "   -s span: set minimum contiguous span that must be "
             "free from defect, in megabytes.\n"
-            "            Default: 10 MB.\n"
             "            If any sector within it is bad, the whole span "
-            "is marked bad.\n" <<
-            std::endl;
+            "is marked bad.\n"
+            "            Default span: 10 MB.\n"
+            "   -t maxReadTime: time to read a sector's worth of data, "
+            "in milliseconds.\n"
+            "            If reading takes longer, consider the sector bad.\n"
+            "            Default: 60,000 milliseconds (1 minute, ie no "
+            "check).\n" << std::endl;
         return 1;
     }
 
@@ -350,7 +378,7 @@ int main( int argc, char *argv[] )
 
     // 2. read device and create a list of bad blocks
     BadBlocks_t badBlocks;
-    GetBadBlocks( device, badBlocks, devsize, minSpan );
+    GetBadBlocks( device, badBlocks, devsize, minSpan, maxReadTime );
 
     // 3. output PNG with bad blocks marked.
     WritePng( device, badBlocks, devsize, devsize );
